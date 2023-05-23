@@ -1,6 +1,7 @@
 package ru.xw1w1.showdamage.utils;
 
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -43,7 +44,7 @@ public class CustomEntityHandler {
         textEntity.remove();
     }
 
-    public void setDefaults(Entity damager) {
+    public void setDefaults(DamageData damage) {
         textEntity.setInvulnerable(true);
         textEntity.setCustomNameVisible(true);
         textEntity.setGravity(false);
@@ -58,9 +59,26 @@ public class CustomEntityHandler {
             ((TextDisplay) textEntity).setBillboard(Display.Billboard.CENTER); // Aligns the text to face towards player
         }
 
-        if (damager instanceof Player player && !config.getBoolean("damage.visible-to-all", false)) {
-            textEntity.setVisibleByDefault(false); // This might break in the future!! Check @ApiStatus.Experimental
-            player.showEntity(Main.getInstance(), textEntity); // Might break: Check @ApiStatus.Experimental
+        if (damage.getDamager() instanceof Player player) {
+            switch (config.getString("damage.visible-to-all", "off").toLowerCase()) {
+                case "off":
+                    // visible to noone
+                    textEntity.setVisibleByDefault(false);
+                    player.showEntity(Main.getInstance(), textEntity);
+                    break;
+                case "pve":
+                    // visible to all, hidden to when damaged is player
+                    // setVisibleByDefault -> true
+                    if (damage.getDamaged() instanceof Player damagedPlayer) {
+                        player.hideEntity(Main.getInstance(), damagedPlayer);
+                    }
+                    break;
+                case "all":
+                    // visible to everyone
+                    break;
+                default:
+                    Bukkit.getLogger().info("Config option 'damage.visible-to-all' has invalid option. ");
+            }
         }
 
         if (config.getBoolean("damage.allow-players-to-disable", true)){ // an optimization might exist here for visible to all

@@ -6,6 +6,7 @@ import org.bukkit.Location;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -35,17 +36,19 @@ public class EntityDamageListener implements Listener {
         @NotNull final FileConfiguration config = Main.getInstance().getConfiguration();
 
         if (!config.getBoolean("messages.damage-visible", true)) return;
+        if (event.getEntity().getType().equals(EntityType.DROPPED_ITEM)) return;
+        if (event.getEntity().getType().equals(EntityType.ARMOR_STAND) && event.getEntity().isInvulnerable()) return;
+        if (!(event.getEntity() instanceof LivingEntity)) return;
 
-        @NotNull final DamageData damage = new DamageData(event.getDamage(), config.getBoolean("damage.hearts", false)); // false
+        @NotNull final DamageData damage = new DamageData(
+                event, // Extracts the stuff it needs, damager, entity, and damageDealt
+                config.getBoolean("damage.hearts", false)
+        );
         @NotNull final Location eventLocation; // Assigned in code block below;
         {
             @NotNull final Location tempLoc = event.getEntity().getLocation();
             eventLocation = new Location(tempLoc.getWorld(), tempLoc.getX(), tempLoc.getY() + (event.getEntity().getBoundingBox().getHeight()) + 0.15, tempLoc.getZ());
         }
-
-
-        if (event.getEntity().getType().equals(EntityType.DROPPED_ITEM)) return;
-        if (event.getEntity().getType().equals(EntityType.ARMOR_STAND) && event.getEntity().isInvulnerable()) return;
 
         switch (event.getCause()) {
             case PROJECTILE:
@@ -62,15 +65,12 @@ public class EntityDamageListener implements Listener {
                                 component(" damage"))));
 
                 if (projectile.getShooter() instanceof Player player) {
-                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                        player.sendMessage(eventMessage);
-                    });
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> player.sendMessage(eventMessage));
                 }
-
                 break;
 
             case ENTITY_ATTACK:
-                if (event.getDamager() instanceof Player player && !isHoldingSword(player)) break;
+                if (damage.getDamager() instanceof Player player && !isHoldingSword(player)) break;
 
             case ENTITY_SWEEP_ATTACK, ENTITY_EXPLOSION, BLOCK_EXPLOSION:
 
@@ -91,9 +91,9 @@ public class EntityDamageListener implements Listener {
 
                     MultiDamageEndResult result = getDamageResult(mDamageData);
                     switch (result) {
-                        case SINGLE_ENTITY_ATTACK_DONE -> ShowDamage.show(damage, dmgInstanceLocation, event.isCritical(), config, event.getDamager());
-                        case SWEEP_ENTITY_ATTACK_DONE -> ShowDamage.show(damage.preAppend(mDamageData.getDamageDealt().valueOf() + " + " + (count-1) + "X"), dmgInstanceLocation, event.isCritical(), config, event.getDamager());
-                        case EXPLOSION_DONE -> ShowDamage.show(damage.preAppend(count + "X"), dmgInstanceLocation, event.isCritical(), config, event.getDamager());
+                        case SINGLE_ENTITY_ATTACK_DONE -> ShowDamage.show(damage, dmgInstanceLocation, config);
+                        case SWEEP_ENTITY_ATTACK_DONE -> ShowDamage.show(damage.preAppend(mDamageData.getDamageDealt().valueOf() + " + " + (count-1) + "X"), dmgInstanceLocation, config);
+                        case EXPLOSION_DONE -> ShowDamage.show(damage.preAppend(count + "X"), dmgInstanceLocation,config);
                     }
 
                     if (result != MultiDamageEndResult.NOT_DONE) Main.MultiDamageSystem.deleteEntry(dmgInstanceLocation);
@@ -101,7 +101,8 @@ public class EntityDamageListener implements Listener {
                 }, 1L);
                 return;
         }
-        ShowDamage.show(damage, eventLocation, event.isCritical(), config, event.getDamager());
+        ShowDamage.show(damage, eventLocation, config);
+        // Listener End
     }
     private static boolean isHoldingSword(@NotNull Player player) {
         boolean sword = false;
@@ -127,7 +128,7 @@ public class EntityDamageListener implements Listener {
     }
     private static void createMultiDamageData(Location damageLocation, EntityDamageEvent.DamageCause cause, DamageData damageDealt) {
         MultiDamageData mDamageData;
-        if (cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK) {
+        if (cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK) { // Assumption; Line 72 is ok.
             mDamageData = new MultiDamageData(true, damageDealt);
         } else {
             mDamageData = new MultiDamageData(false);
